@@ -1,0 +1,366 @@
+
+---
+title: "CART on Titanic dataset"
+output: html_notebook
+---
+
+
+Load datasets
+
+
+```{r}
+
+require(readr)
+
+train <- read_csv("C:/Users/chauh/Downloads/titanic/train.csv")
+test <-  read_csv("C:/Users/chauh/Downloads/titanic/test.csv")
+
+```
+
+
+Bind datasets into one master dataset for our convenience.
+
+```{r}
+require(dplyr)
+
+master <- bind_rows(train, test)
+
+str(master)
+
+```
+
+
+Case mismatch and Duplicate records
+
+```{r}
+master <- mutate_if(master, is.character, toupper)
+
+master <- distinct(master)
+
+```
+
+
+
+Check missing values
+
+```{r}
+
+colSums(is.na(master))
+
+```
+
+
+
+
+
+```{r}
+
+sum(is.na(master$Cabin)) / nrow(master) * 100 
+
+```
+
+Cabin has 77% blanks.
+
+Better to remove it.
+
+```{r}
+
+master$Cabin <- NULL
+
+```
+
+
+
+
+
+
+
+
+```{r}
+
+colSums(is.na(master))
+
+```
+
+
+1 NA in Fare
+
+```{r}
+summary(master$Fare)
+
+```
+
+
+
+```{r}
+
+master[ is.na(master$Fare) ,  ]
+
+```
+
+
+
+```{r}
+
+summary(master$Fare[which(master$Pclass==3 & master$Embarked == 'S')])
+
+```
+
+
+
+
+```{r}
+
+master$Fare[ is.na(master$Fare) ] <- 8.050  
+
+summary(master$Fare)
+```
+
+
+
+    Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+   0.000   7.896  14.454  33.295  31.275 512.329       1 
+
+
+
+
+
+```{r}
+
+table(master$Embarked)
+
+```
+
+
+
+
+
+```{r}
+
+master[is.na(master$Embarked) , ]
+
+```
+
+
+
+```{r}
+require(ggplot2)
+
+ggplot(master, aes(x = Embarked, y = Fare, fill = Embarked)) + geom_boxplot()
+
+```
+
+
+
+
+```{r}
+
+master$Embarked[ is.na(master$Embarked) ] <- 'C'
+
+```
+
+
+
+
+
+
+```{r}
+
+colSums(is.na(master))
+
+```
+
+
+
+
+
+```{r}
+require(mice)
+
+mice_df <- master[ , -c(1, 2, 4, 9)]
+
+```
+
+
+
+```{r}
+mice_imp <- mice(mice_df , method = 'rf')
+
+mice_df <- complete(mice_imp)
+
+```
+
+
+
+
+```{r}
+
+par(mfrow = c(1,2))
+
+hist(master$Age, col = 'grey')
+
+hist(mice_df$Age, col = 'green')
+```
+
+
+```{r}
+
+master$Age <- mice_df$Age
+
+```
+
+
+
+*** Univariate Analysis ***
+
+
+```{r}
+
+colnames(master)
+
+```
+
+
+
+1. PassengerId
+
+```{r}
+
+n_distinct(master$PassengerId)
+
+```
+
+
+
+
+2. Survived
+
+```{r}
+
+table(master$Survived)
+
+round(prop.table(table(master$Survived)) * 100, 2)
+
+```
+
+
+
+
+3. Pclass
+
+```{r}
+class(master$Pclass)
+
+```
+
+
+
+4. Name
+
+```{r}
+
+master$Name <- NULL
+
+```
+
+
+5. Gender
+
+```{r}
+table(master$Sex)
+
+round(prop.table(table(master$Sex)) * 100, 2)
+
+```
+
+
+
+```{r}
+
+master$Relatives <- master$SibSp + master$Parch
+
+```
+
+
+
+```{r}
+
+master$Ticket <- NULL
+
+```
+
+
+
+
+
+
+Split back into available data and test data
+
+```{r}
+
+train <- master[ 1:891, ]
+
+test <- master[ 892:1309, ]
+
+```
+
+
+
+
+```{r}
+
+train$Survived <- as.character(train$Survived)
+
+```
+
+
+```{r}
+require(rpart)
+
+dt_model <- rpart(Survived ~ ., data = train[,-1])
+
+
+```
+
+
+
+```{r}
+require(rpart.plot)
+
+prp(dt_model)
+```
+
+
+
+
+```{r}
+
+dt_pred <- predict(dt_model, newdata = test)
+
+View(dt_pred)
+
+```
+
+
+
+
+```{r}
+test$Survived <- ifelse(dt_pred[,2] > 0.5, 1, 0)
+
+
+
+```
+
+
+
+
+
+```{r}
+
+submission <- test[ , c(1, 2)]
+
+write.csv(submission, "submission_dt.csv", row.names = F)
+
+```
+
+
